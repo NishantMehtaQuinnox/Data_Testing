@@ -1,1 +1,3 @@
 .conda/
+connectors/redshift/__pycache__/
+connectors/sql/__pycache__/
