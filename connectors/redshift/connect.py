@@ -1,7 +1,8 @@
-import psycopg2
-from psycopg2 import Error
 
-class RedshiftConnector:
+import asyncpg
+import time
+
+class AsyncRedshiftConnector:
     def __init__(self, host, database, user, password, port=5439):
         self.host = host
         self.database = database
@@ -9,61 +10,60 @@ class RedshiftConnector:
         self.password = password
         self.port = port
         self.connection = None
+        self.batch_size = 100000
+        
+    async def add_limit_offset(self,query,batch_size,offset):
+        return f"{query} LIMIT {batch_size} OFFSET {offset}"
 
-    def open_connection(self):
+    async def open_connection(self):
         try:
-            self.connection = psycopg2.connect(
+            self.connection = await asyncpg.connect(
                 host=self.host,
-                dbname=self.database,
+                database=self.database,
                 user=self.user,
                 password=self.password,
                 port=self.port
             )
-            if self.connection:
-                print(f"Connected to Redshift cluster {self.host}")
-        except Error as e:
+            print(f"Connected to Redshift cluster {self.host}")
+        except Exception as e:
             print(f"Error while connecting to Redshift: {e}")
 
-    def fetch_all_records(self, table_name):
-        return self.fetch_specific_records(f"SELECT * FROM {table_name}")
+    async def fetch_all_records(self, table_name):
+        return await self.fetch_specific_records(f"SELECT * FROM {table_name}")
+    
+    async def fetch_count(self, base_query):
+        """
+        Fetch the count of rows for a given query.
+        
+        :param base_query: The base query to count rows for.
+        :return: The count of rows.
+        """
+        # Construct the count query from the base query
+        count_query = f"SELECT COUNT(*) FROM ({base_query}) as count_subquery"
 
-    def fetch_specific_records(self, query):
-        records = []
-        if self.connection is not None:
-            try:
-                cursor = self.connection.cursor()
-                cursor.execute(query)
-                records = cursor.fetchall()
-                print(f"Number of rows returned: {cursor.rowcount}")
-                cursor.close()
-            except Error as e:
-                print(f"Error executing query: {e}")
-        return records
+        async with self.connection.transaction():
+            # Execute the count query
+            count = await self.connection.fetchval(count_query)
+            return count
 
-    def close_connection(self):
+    async def fetch_batch(self, query, batch_number):
+        offset = batch_number * self.batch_size
+        # Modify query to include LIMIT and OFFSET
+        # Ensure that your query_template includes '{}' placeholders for LIMIT and OFFSET
+        batch_query = await self.add_limit_offset(query,self.batch_size,offset)
+        async with self.connection.transaction():
+            # Execute the batch query
+            records = await self.connection.fetch(batch_query)
+            if records:
+                # Extract headers only if we have records, and only for the first batch
+                headers = records[0].keys() if batch_number == 0 else None
+                return records, headers
+            return [], None
+
+    async def record_to_tuple(record):
+        return tuple(record.values())
+
+    async def close_connection(self):
         if self.connection:
-            self.connection.close()
+            await self.connection.close()
             print("Redshift connection is closed")
-
-
-host = 'your-redshift-cluster-url'
-database = 'your-database-name'
-user = 'your-username'
-password = 'your-password'
-table_name = 'your-table-name'
-port = 5439
-rs_connection = RedshiftConnector(host, database, user, password, port)
-rs_connection.open_connection()
-
-# Fetch all records from Redshift
-all_records = rs_connection.fetch_all_records(table_name)
-for record in all_records:
-    print(record)
-
-# Fetch specific records from Redshift with a custom query
-custom_query = "SELECT * FROM your-table-name WHERE some-column > some-value"
-specific_records = rs_connection.fetch_specific_records(custom_query)
-for record in specific_records:
-    print(record)
-
-rs_connection.close_connection()
