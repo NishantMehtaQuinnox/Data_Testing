@@ -67,3 +67,58 @@ class AsyncRedshiftConnector:
         if self.connection:
             await self.connection.close()
             print("Redshift connection is closed")
+
+
+import psycopg2
+
+class RedshiftConnector:
+    def __init__(self, host, database, user, password, port=5439):
+        self.host = host
+        self.database = database
+        self.user = user
+        self.password = password
+        self.port = port
+        self.connection = None
+        self.batch_size = 100000
+        
+    def add_limit_offset(self, query, batch_size, offset):
+        return f"{query} LIMIT {batch_size} OFFSET {offset}"
+
+    def open_connection(self):
+        try:
+            self.connection = psycopg2.connect(
+                dbname=self.database,
+                user=self.user,
+                password=self.password,
+                host=self.host,
+                port=self.port
+            )
+            print(f"Connected to Redshift cluster {self.host}")
+        except Exception as e:
+            print(f"Error while connecting to Redshift: {e}")
+
+    def fetch_count(self, base_query):
+        count_query = f"SELECT COUNT(*) FROM ({base_query}) as count_subquery"
+        with self.connection as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(count_query)
+                count = cursor.fetchone()[0]
+            return count
+
+    def fetch_batch(self, query, batch_number):
+        offset = batch_number * self.batch_size
+        batch_query = self.add_limit_offset(query, self.batch_size, offset)
+        with self.connection as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(batch_query)
+                records = cursor.fetchall()
+
+            if records:
+                headers = [desc[0] for desc in cursor.description] if batch_number == 0 else None
+                return records, headers
+            return [], None
+
+    def close_connection(self):
+        if self.connection:
+            self.connection.close()
+            print("Redshift connection is closed")
