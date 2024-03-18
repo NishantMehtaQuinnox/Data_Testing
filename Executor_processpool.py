@@ -182,9 +182,10 @@ def main():
 
     # Start processing and timing
     st_time = time.time()
+    max_workers = os.cpu_count() - 1 or 1
 
     # Use ProcessPoolExecutor to process each batch in parallel
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         for batch_processed in executor.map(
             batch_pipeline,
             repeat(db),
@@ -202,53 +203,3 @@ def main():
  
 if __name__ == "__main__":
     main()
-
-# import concurrent.futures
-
-# def main():
-#     db_params = {
-#         'database': 'dev',
-#         'user': 'admin',
-#         'password': 'Qyrus#789',
-#         'host': 'ai-rs-poc.293963594940.ap-south-1.redshift-serverless.amazonaws.com',
-#         'port': 5439
-#     }
-
-#     db_query = "SELECT * FROM transactions"
-#     s3_key_prefix = f'data_testing/{uuid.uuid1()}'
-    
-#     # Start processing and timing
-#     st_time = time.time()
-
-#     connector = AsyncRedshiftConnector(**db_params)
-#     asyncio.run(connector.open_connection())
-
-#     try:
-#         # Fetch the total number of rows to process
-#         total_rows = asyncio.run(connector.fetch_count(db_query))
-#         asyncio.run(connector.close_connection())
-#         # Calculate the required number of batches
-#         batch_size = connector.batch_size  # Assuming 100000 rows per batch as per constructor definition
-#         total_batches = -(-total_rows // batch_size)  # Ceiling division for total batch count
-
-#         # Start processing batches with a progress bar
-#         with tqdm(total=total_batches, desc='Processing Batches', unit='batch') as progress_bar:
-            
-#             # Use ProcessPoolExecutor to process each batch in parallel
-#             with ProcessPoolExecutor() as executor:
-#                 futures = {
-#                     executor.submit(batch_pipeline, db_params, db_query, s3_key_prefix, i): i
-#                     for i in range(total_batches)
-#                 }
-
-#                 # Process completed futures
-#                 for future in concurrent.futures.as_completed(futures):
-#                     progress_bar.update(1)  # Increment the progress bar for each completed batch
-
-#     finally:
-#         # Clean up connection and progress bar
-#         progress_bar.close()
-#         print(f"Total Time: {time.time() - st_time}")
-
-# if __name__ == "__main__":
-#     main()
