@@ -1,0 +1,29 @@
+aioboto3
+aiohttp  # Likely needed for fastapi
+fastapi
+certifi
+cffi
+charset-normalizer
+click
+colorama
+comm
+cryptography
+debugpy
+decorator
+dill
+dnslib
+dnspython
+docutils
+ecdsa
+executing
+Faker
+# ... (other packages you need that aren't web-related)
+requests  # Might be used by fastapi internally
+rich
+rsa
+s3transfer  # Likely used by aioboto3
+pytz
+PyYAML
+# ... (other packages you need that aren't web-related)
+urllib3  # Might be used by aiohttp or fastapi internally
+yarl  # Might be used by aiohttp or fastapi internally

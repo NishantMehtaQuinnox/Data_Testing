@@ -114,7 +114,7 @@ class RedshiftConnector:
                 records = cursor.fetchall()
 
             if records:
-                headers = [desc[0] for desc in cursor.description] if batch_number == 0 else None
+                headers = [desc[0] for desc in cursor.description]
                 return records, headers
             return [], None
 

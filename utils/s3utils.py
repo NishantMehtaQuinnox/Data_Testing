@@ -5,11 +5,12 @@ from botocore.exceptions import ConnectTimeoutError, ClientError
 import traceback
 import requests
 from urllib.parse import urlparse, unquote
+import tempfile
 
 load_dotenv()
 
 class BUCKET_CONFIGS:
-    BUCKET_NAME = os.environ.get("BUCKET_NAME", "ctc-qa-ai")
+    BUCKET_NAME = os.environ.get("BUCKET_NAME", "ai-services-stg")
     BUCKET_REGION = os.environ.get("BUCKET_REGION", "us-west-2")
     AWS_ACCESS_KEY = os.environ.get("AWS_ACCESS_KEY")
     AWS_SECRET_ACCESS_ID = os.environ.get("AWS_SECRET_ACCESS_ID")
@@ -53,16 +54,40 @@ class S3Utils:
             # self.bucket = self.bucket_resource.Bucket(bucket_name)
 
         else:
-
             self.bucket_resource = boto3.client("s3")
+            
+    def list_files(self, prefix):
+        try:
+            response = self.bucket_resource.list_objects_v2(Bucket=BUCKET_CONFIGS.BUCKET_NAME, Prefix=prefix)
+            files = response.get('Contents', [])
+            return [self.__generate_presigned_url__(file['Key']) for file in files]
+        except ClientError as cerr:
+            print(f'CLIENT ERROR WHEN UPLOADING FILE: {cerr}')
+            try:
+                self.__get_bucket_resource__(BUCKET_CONFIGS.BUCKET_REGION,
+                                             BUCKET_CONFIGS.ROLE_SESSION)
+                return self.list_files(prefix)
+            except Exception as e:
+                print(
+                    f'EXCEPTION IN INITIALIZING THE BUCKET RESOURCE IN CLIENT ERROR BLOCK (UPLOAD FILE): {str(e)}'
+                )
+                print(f'TRACEBACK: {traceback.format_exc()}')
+                return False, False, None
+        except Exception as e:
+            print(f'EXCEPTION WHILE UPLOADING THE FILE: {str(e)}')
+            print(f'TRACEBACK: {traceback.format_exc()}')
+            return False, False, None
 
-    def download_file(self,url:str):
+    def download_file_get_content(self,url:str):
         file_name = unquote(urlparse(url).path.split('/')[-1]) 
         response = requests.get(url)
         if response.ok:
-            file_content = response.content  # or response.text if the content is text
+            # with tempfile.NamedTemporaryFile(delete=False, mode='wb') as tmpfile:
+            #     tmpfile.write(response.content)
+            #     temp_file_path = tmpfile.name
+            # or response.text if the content is text
             # Now you can work with file_content as needed
-            return file_name,file_content
+            return response.content
         # file_path = 'tmp/'+key_name
         # os.makedirs(os.path.dirname(file_path), exist_ok=True)
         # self.bucket_resource.download_file(BUCKET_CONFIGS.BUCKET_NAME, key_name, file_path)
@@ -93,7 +118,7 @@ class S3Utils:
             return purl, key, True
 
         except ClientError as cerr:
-            print(f'CLIENT ERROR WHEN DOWNLOADING FILE: {cerr}')
+            print(f'CLIENT ERROR WHEN UPLOADING FILE: {cerr}')
             try:
                 self.__get_bucket_resource__(BUCKET_CONFIGS.BUCKET_REGION,
                                              BUCKET_CONFIGS.ROLE_SESSION)
