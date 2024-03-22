@@ -45,3 +45,37 @@ class DataValidator:
 
     def custom_comparator(self, column_name, comparator_fn):
         return comparator_fn(self.dataframe[column_name])
+    
+    def generate_report(self, filename=None, regex_pattern=None, max_size_mb=None, 
+                        expected_format=None, expected_count=None, expected_types=None, 
+                        subset_columns=None, check_null_columns=None):
+
+        report = {}
+
+        if filename and regex_pattern is not None:
+            report['filename_matches_regex'] = self.filename_matches_regex(filename, regex_pattern)
+
+        if filename and max_size_mb is not None:
+            report['file_size_within_limit'] = self.file_size_within_limit(filename, max_size_mb)
+
+        if filename and expected_format is not None:
+            report['file_format_is_correct'] = self.file_format_is_correct(filename, expected_format)
+
+        if expected_count is not None:
+            report['record_count_matches'] = self.record_count_matches(expected_count)
+
+        if expected_types is not None:
+            report['column_data_types'] = self.column_data_types(expected_types)
+
+        if subset_columns is not None:
+            report['duplicates_exist'] = self.duplicates_exist(subset_columns)
+            
+        if check_null_columns is not None:
+            report['not_null_columns'] = self.not_null_columns(check_null_columns)
+
+        return report
+    
+    
+    def print_report(self, report):
+        for test, result in report.items():
+            print(f"{test}: {'PASS' if result else 'FAIL'}")

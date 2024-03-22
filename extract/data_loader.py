@@ -1,9 +1,9 @@
-import cudf
-from utils.s3utils import S3Utils
-import io
-import os
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# import cudf
+# from utils.s3utils import S3Utils
+# import io
+# import os
+# import time
+# from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # class JsonToGDFLoader:
 #     def __init__(self, folder_url):
@@ -69,12 +69,15 @@ from utils.s3utils import S3Utils
 import io
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import logging
+import tqdm
 
 # Set up the basic logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
+
+s3utils = S3Utils()
 
 class JsonToGDFLoader:
     """
@@ -87,14 +90,13 @@ class JsonToGDFLoader:
         Initialize the loader with the folder URL.
         """
         self.folder_url = folder_url
-        self.s3utils = S3Utils()
 
     def download_and_load_json(self, url):
         """
         Download a single JSON file content and load into a cuDF DataFrame.
         """
         try:
-            content = self.s3utils.download_file_get_content(url)
+            content = s3utils.download_file_get_content(url)
             if content:
                 return cudf.read_json(io.BytesIO(content), lines=True)
         except Exception as e:
@@ -106,12 +108,15 @@ class JsonToGDFLoader:
         Parallelize downloads and concatenates individual DataFrames into one.
         """
         futures_to_url = {}
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
             for url in urls:
-                futures_to_url[executor.submit(self.download_and_load_json, url)] = url
+                future = executor.submit(self.download_and_load_json, url)
+                futures_to_url[future] = url
 
         gdf_list = []
-        for future in as_completed(futures_to_url):
+        
+        # Wrap the as_completed iterator with tqdm for a progress bar
+        for future in tqdm(as_completed(futures_to_url), total=len(futures_to_url), unit="file"):
             gdf = future.result()
             if gdf is not None:
                 gdf_list.append(gdf)
@@ -123,7 +128,7 @@ class JsonToGDFLoader:
         """
         Load JSON files contained within the folder URL into a single cuDF DataFrame.
         """
-        list_urls = self.s3utils.list_files(self.folder_url)
+        list_urls = s3utils.list_files(self.folder_url)
         max_workers = os.cpu_count() - 1 or 1
         return self.load_jsons_to_df_with_cudf(list_urls, max_workers)
     
