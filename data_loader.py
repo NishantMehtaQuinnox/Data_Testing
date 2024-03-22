@@ -163,31 +163,31 @@ class JsonToGDFLoader:
 # ...
 
 
-# Usage
-folder_url = 'data_testing/7bc4e498-e698-11ee-9eb5-025f58bc16f6'
-loader = JsonToGDFLoader(folder_url)
-gdf = loader.load()
-
-
-# Define your transformations list as follows:
-transformations = [
-    {
-        'from_column_name': 'original_column1',
-        'to_column_name': 'new_column1',
-        'type_update': 'int64',
-        'transformation_function': lambda x: x * 2
-    },
-    {
-        'from_column_name': 'original_column2',
-        'to_column_name': 'new_column2',
-        'type_update': None,
-        'transformation_function': lambda x: x.strip() if isinstance(x, str) else x
-    }
-    # Add as many dictionaries as needed for transformations
-]
-
-folder_url = 'data_testing/7bc4e498-e698-11ee-9eb5-025f58bc16f6'
-loader = JsonToGDFLoader(folder_url)
-loader.print_head_and_time_taken()
+# # Usage
+# folder_url = 'data_testing/7bc4e498-e698-11ee-9eb5-025f58bc16f6'
+# loader = JsonToGDFLoader(folder_url)
 # gdf = loader.load()
-# tgdf = loader.transform_gdf(gdf,transformations)
+
+
+# # Define your transformations list as follows:
+# transformations = [
+#     {
+#         'from_column_name': 'original_column1',
+#         'to_column_name': 'new_column1',
+#         'type_update': 'int64',
+#         'transformation_function': lambda x: x * 2
+#     },
+#     {
+#         'from_column_name': 'original_column2',
+#         'to_column_name': 'new_column2',
+#         'type_update': None,
+#         'transformation_function': lambda x: x.strip() if isinstance(x, str) else x
+#     }
+#     # Add as many dictionaries as needed for transformations
+# ]
+
+# folder_url = 'data_testing/7bc4e498-e698-11ee-9eb5-025f58bc16f6'
+# loader = JsonToGDFLoader(folder_url)
+# loader.print_head_and_time_taken()
+# # gdf = loader.load()
+# # tgdf = loader.transform_gdf(gdf,transformations)

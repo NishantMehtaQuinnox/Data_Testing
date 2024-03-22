@@ -1,45 +1,57 @@
-# main.py
-import boto3
-import csv
-from io import StringIO
-from connectors.redshift.connect import RedshiftConnector
-from connectors.sql.connect import MysqlConnector,AsyncMysqlConnector
-import asyncio
+from data_loader import JsonToGDFLoader
+from validator import DataValidator
 
-# Initialize connectors
-#redshift = RedshiftConnector(host='127.0.0.1', port = '', database='mydatabase', user='myuser', password='password')
-mysql = AsyncMysqlConnector(host='127.0.0.1', database='mydatabase', user='myuser', password='mypassword')
+# Define your transformations list as follows:
+transformations = [
+    {
+        'from_column_name': 'original_column1',
+        'to_column_name': 'new_column1',
+        'type_update': 'int64',
+        'transformation_function': lambda x: x * 2
+    },
+    {
+        'from_column_name': 'original_column2',
+        'to_column_name': 'new_column2',
+        'type_update': None,
+        'transformation_function': lambda x: x.strip() if isinstance(x, str) else x
+    }
+    # Add as many dictionaries as needed for transformations
+]
 
-# Fetch records from Redshift
-#redshift_query = "SELECT * FROM your_redshift_table"
-#redshift_data = redshift.fetch_specific_records(redshift_query)
+folder_url = 'data_testing/7bc4e498-e698-11ee-9eb5-025f58bc16f6'
+loader = JsonToGDFLoader(folder_url)
+df = loader.load()
 
-# Fetch records from SQL (MySQL)
-asyncio.run(mysql.open_connection())
-mysql_query = "SELECT * FROM transactions"
-mysql_data = asyncio.run(mysql.fetch_specific_records(mysql_query))
+tdf = loader.transform_gdf(df,transformations)
 
-# Convert to CSV format
-def convert_to_csv(data):
-    si = StringIO()
-    cw = csv.writer(si)
-    cw.writerows(data)
-    return si.getvalue().strip('\\r\\n')
+# Assuming `df` is your cuDF DataFrame and 'data.json' is the file you're validating
+validator = DataValidator(df)
 
-# Upload to S3
-def upload_to_s3(bucket_name, s3_file_name, data):
-    s3_resource = boto3.resource('s3')
-    s3_resource.Object(bucket_name, s3_file_name).put(Body=data)
+# Define your validations
+filename_regex = r'^data_\\d{4}.json$'
+file_size_limit_mb = 10
+file_format = '.json'
+expected_record_count = 7740001
+expected_data_types = {
+    'name': 'object', 
+    'age': 'int64',
+    # Other columns and their expected types...
+}
+expected_not_null_columns = ['name', 'age']
+expected_field_length = {
+    'name': (1, 50)
+}
 
-# Usage
-bucket_name = 'your-bucket-name'
+# Perform validations
+# assert validator.filename_matches_regex('data.json', filename_regex)
+# assert validator.file_size_within_limit('data.json', file_size_limit_mb)
+# assert validator.file_format_is_correct('data.json', file_format)
+assert validator.record_count_matches(expected_record_count)
+assert validator.column_data_types(expected_data_types)
+assert not validator.duplicates_exist()
+assert validator.not_null_columns(expected_not_null_columns)
+assert validator.field_length_within_range('name', *expected_field_length['name'])
+# For custom comparators, provide the lambda or function
+# assert validator.custom_comparator('age', lambda ages: (ages > 0).all())
 
-# Convert data to CSV
-#redshift_csv_data = convert_to_csv(redshift_data)
-mysql_csv_data = convert_to_csv(mysql_data)
-
-# Upload Redshift data to S3
-#upload_to_s3(bucket_name, 'redshift_data.csv', redshift_csv_data)
-
-# Upload MySQL data to S3
-upload_to_s3(bucket_name, 'mysql_data.csv', mysql_csv_data)
+# If any assertion fails, it will raise an AssertionError.

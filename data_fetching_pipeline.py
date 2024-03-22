@@ -1,6 +1,5 @@
 import os
 import time
-from itertools import repeat
 import pandas as pd
 import pathlib
 import tempfile
@@ -11,6 +10,11 @@ from connectors.sql.connect import MysqlConnector
 from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 import traceback
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 s3utils = S3Utils()
 
@@ -23,12 +27,10 @@ class DataFetchingPipeline:
         self.uuid = str(uuid1())
 
     def write_batch_to_json_pandas(self, batch_tuples, headers, batch_number):
-        st_time = time.time()
         file_name = f"batch_{batch_number}_{uuid1()}.json"
         df = pd.DataFrame(batch_tuples, columns=headers)
         file_path = pathlib.Path(tempfile.gettempdir()) / file_name
         df.to_json(file_path, orient='records', lines=True)
-        duration = time.time() - st_time
         return str(file_path)
 
     def record_to_tuple(self, record):
@@ -70,7 +72,11 @@ class DataFetchingPipeline:
         with open(json_path, 'rb') as f:
             data = f.read()
         
-        s3utils.upload_file(s3_key, data)
+        try:
+            s3utils.upload_file(s3_key, data)
+            logger.info(f"Uploaded batch {batch_number} to S3 key: {s3_key}")
+        except Exception as e:
+            logger.error(f"Failed to upload batch {batch_number} due to error: {e}")
         os.remove(json_path)
         return 1
 
@@ -92,32 +98,33 @@ class DataFetchingPipeline:
                 ):
                     progress_bar.update(batch_processed)
 
-            print(f"Total Time: {time.time() - st_time}")
+            logger.info(f"Total Time: {time.time() - st_time}")
             
         except:
-            traceback.print_exc()
+            logger.error(f"An error occurred during migration: {traceback.print_exc()}")
+            
 
-if __name__ == "__main__":
-    redshiftparams = {
-        'database': 'dev',
-        'user': 'admin',
-        'password': 'Qyrus#789',
-        'host': 'ai-rs-poc.293963594940.ap-south-1.redshift-serverless.amazonaws.com',
-        'port': 5439
-    }
+# if __name__ == "__main__":
+#     redshiftparams = {
+#         'database': 'dev',
+#         'user': 'admin',
+#         'password': 'Qyrus#789',
+#         'host': 'ai-rs-poc.293963594940.ap-south-1.redshift-serverless.amazonaws.com',
+#         'port': 5439
+#     }
 
-    mysqlparmas = {
-        'database': 'mydatabase',
-        'user': 'myuser',
-        'password': 'mypassword',
-        'host': '127.0.0.1'
-    }
+#     mysqlparmas = {
+#         'database': 'mydatabase',
+#         'user': 'myuser',
+#         'password': 'mypassword',
+#         'host': '127.0.0.1'
+#     }
 
-    db_params = redshiftparams  # This should be set based on the DB you want to use
-    db_query = "SELECT * FROM transactions"
-    uuid_str = str(uuid1())
-    print(uuid_str)
-    s3_key_prefix = f'data_testing/{uuid_str}/{uuid_str}'
-    db = "mysql" if db_params == mysqlparmas else "redshift"
-    migration_pipeline = DataFetchingPipeline(db , db_params, db_query, s3_key_prefix)
-    migration_pipeline.start_migration()
+#     db_params = redshiftparams  # This should be set based on the DB you want to use
+#     db_query = "SELECT * FROM transactions"
+#     uuid_str = str(uuid1())
+#     print(uuid_str)
+#     s3_key_prefix = f'data_testing/{uuid_str}/{uuid_str}'
+#     db = "mysql" if db_params == mysqlparmas else "redshift"
+#     migration_pipeline = DataFetchingPipeline(db , db_params, db_query, s3_key_prefix)
+#     migration_pipeline.start_migration()
