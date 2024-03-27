@@ -5,8 +5,10 @@ from pydantic import BaseModel
 import uvicorn
 import jobs
 from config_to_s3 import store_config_to_s3
+from utils.sqs_utils import EventsQueueProducer
 
 app = FastAPI()
+eqp = EventsQueueProducer()
 
 class Job(BaseModel):
     username: str
@@ -27,6 +29,8 @@ async def create_job(
 
     response = await jobs.add_job_to_db(config, job_id, config_path)
 
+    queue_response = eqp.produce({"job_id":response.get("job_id")})
+
     return response
 
 @app.get("/get_jobs_for_user/{username}")
@@ -37,7 +41,6 @@ async def get_jobs_for_user(username: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to retrieve job status from the database") from e
 
-# Get Job Status
 @app.get("/get_job_status/{request_id}")
 async def get_job_status(request_id: str):
     try:
