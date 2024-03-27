@@ -6,16 +6,25 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from utils.s3utils import S3Utils
 import uvicorn
+from connectors.sql.connect import AsyncMysqlConnector
 
 app = FastAPI()
+
+jobs_db = AsyncMysqlConnector(
+    host=os.getenv("MYSQL_HOST","127.0.0.1"),
+    port=int(os.getenv("MYSQL_PORT", "3306")),
+    user=os.getenv("MYSQL_USER", "myuser"),
+    password=os.getenv("MYSQL_PASS", "mypassword"),
+    database=os.getenv("MYSQL_DB", "mydatabase"),
+)
 
 class Job(BaseModel):
     username: str
     job_name : str
     job_description : str
-    db_configs: List[dict]
+    db_configs: dict
+    column_to_join : str
     job_type: str
-    mappings: List[dict]
 
 @app.post("/start_job")
 async def create_job(
@@ -27,7 +36,7 @@ async def create_job(
 
     config_path = await store_config_to_s3(config, job_id)
 
-    response = await add_job_to_db(config.username, config.job_type, job_id, config_path, config.job_name, config.job_description)
+    response = await add_job_to_db(config, job_id, config_path)
 
     return response
 
@@ -40,91 +49,60 @@ async def store_config_to_s3(config: Job, job_id: str):
         raise HTTPException(status_code=500, detail="Failed to store configuration data to S3")
     return config_path
 
-async def add_job_to_db(username: str, job_type: str, job_id: str, config_path, job_name, job_description):
-    MYSQL_HOST = os.getenv("MYSQL_HOST","127.0.0.1")
-    MYSQL_USER = os.getenv("MYSQL_USER", "myuser")
-    MYSQL_PASS = os.getenv("MYSQL_PASS", "mypassword")
-    MYSQL_DB = os.getenv("MYSQL_DB", "mydatabase")
-    MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-
+async def add_job_to_db(config: Job, job_id: str, config_path):
     try:
         # It is better to use a connection pool instead of raw connect
-        pool = await aiomysql.create_pool(host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASS, db=MYSQL_DB)
-        async with pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
+        await jobs_db.open_connection()
+        affected_rows = await jobs_db.execute_query(
                     """
                     INSERT INTO DataTestingJobs 
                     (job_id, username, status, job_type, configs, job_name, job_description)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (job_id, username, "STARTED", job_type, config_path, job_name, job_description)
+                    (job_id, config.username, "STARTED", config.job_type, config_path, config.job_name, config.job_description)
                 )
-                await conn.commit()
-    except aiomysql.Error as e:
-        raise HTTPException(status_code=500, detail="Failed to insert job details into the database") from e
-    finally:
-        pool.close()
-        await pool.wait_closed()
+        await jobs_db.close_connection()
+        if affected_rows:
+            return {"message": "Test Started successfully", "job_id": job_id}
+        else:
+            return {"message": "Test Starting Failed", "job_id": job_id}
 
-    return {"message": "Test Started successfully", "job_id": job_id}
+    except Exception as e:
+        print(e)
 
-# Get Jobs for a User
 @app.get("/get_jobs_for_user/{username}")
 async def get_jobs_for_user(username: str):
-    MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
-    MYSQL_USER = os.getenv("MYSQL_USER", "myuser")
-    MYSQL_PASS = os.getenv("MYSQL_PASS", "mypassword")
-    MYSQL_DB = os.getenv("MYSQL_DB", "mydatabase")
-    MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-
     try:
-        pool = await aiomysql.create_pool(host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASS, db=MYSQL_DB)
-        async with pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cursor:
-                await cursor.execute(
-                    """
-                    SELECT * FROM DataTestingJobs WHERE username = %s
-                    """,
-                    (username,)
-                )
-                jobs = await cursor.fetchall()
-                return jobs
-    except aiomysql.Error as e:
+        await jobs_db.open_connection()
+        query = "SELECT * FROM DataTestingJobs WHERE username = %s"
+        jobs =  await jobs_db.execute_query(query, (username,))
+        return jobs
+
+    except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to retrieve user jobs from the database") from e
+
     finally:
-        pool.close()
-        await pool.wait_closed()
+        # Close the connection
+        await jobs_db.close_connection()
 
 # Get Job Status
 @app.get("/get_job_status/{request_id}")
 async def get_job_status(request_id: str):
-    MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
-    MYSQL_USER = os.getenv("MYSQL_USER", "myuser")
-    MYSQL_PASS = os.getenv("MYSQL_PASS", "mypassword")
-    MYSQL_DB = os.getenv("MYSQL_DB", "mydatabase")
-    MYSQL_PORT = int(os.getenv("MYSQL_PORT", "3306"))
-
     try:
-        pool = await aiomysql.create_pool(host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASS, db=MYSQL_DB)
-        async with pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cursor:
-                await cursor.execute(
-                    """
-                    SELECT * FROM DataTestingJobs WHERE job_id = %s
-                    """,
+        await jobs_db.open_connection()
+        jobs = await jobs_db.execute_query(
+                    "SELECT * FROM DataTestingJobs WHERE job_id = %s",
                     (request_id,)
                 )
-                job = await cursor.fetchone()
-                if job:
-                    return job
-                else:
-                    raise HTTPException(status_code=404, detail="Job not found")
-    except aiomysql.Error as e:
+        if jobs:
+            return jobs[0]
+        else:
+            raise HTTPException(status_code=404, detail="Job not found")
+    except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to retrieve job status from the database") from e
     finally:
-        pool.close()
-        await pool.wait_closed()
+        # Close the connection
+        await jobs_db.close_connection()
 
 if __name__ == "__main__":
     # Use this for development with automatic reload
