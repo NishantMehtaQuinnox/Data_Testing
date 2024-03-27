@@ -1,0 +1,70 @@
+{
+    "username": "Nishant",
+    "job_name": "Test",
+    "job_description": "Test",
+    "db_configs": {
+      "db_1": {
+        "database": "dev",
+        "user": "admin",
+        "password": "Qyrus#789",
+        "host": "ai-rs-poc.293963594940.ap-south-1.redshift-serverless.amazonaws.com",
+        "port": 5439,
+        "db_type": "Redshift",
+        "db_query": "Select * from transactions",
+        "mappings": [
+          {
+            "from_column_name": "account_code",
+            "to_column_name": "acc_code"
+          },
+          {
+            "from_column_name": "customer_code",
+            "to_column_name": "cust_code"
+          },
+          {
+            "from_column_name": "tx_type",
+            "to_column_name": "tx_type",
+            "type_update": "object"
+          }
+        ]
+      }
+    },
+    "job_type": {
+      "job_type": "evaluate",
+      "job_info": {
+        "verifications": [
+          {
+            "verification": "filename_matches_regex",
+            "filename": null,
+            "regex_pattern": null
+          },
+          {
+            "verification": "file_size_within_limit",
+            "filename": null,
+            "max_size_mb": null
+          },
+          {
+            "verification": "file_format_is_correct",
+            "filename": null,
+            "expected_format": null
+          },
+          {
+            "verification": "record_count_matches",
+            "expected_count": null
+          },
+          {
+            "verification": "column_data_types",
+            "expected_types": [{"name":"str"},{"number":"int64"}]
+          },
+          {
+            "verification": "duplicates_exist",
+            "subset_columns": ["name","number"]
+          },
+          {
+            "verification": "not_null_columns",
+            "check_null_columns": ["name","number"]
+          }
+        ],
+        "column_to_join": "Test"
+      }
+    }
+  }
