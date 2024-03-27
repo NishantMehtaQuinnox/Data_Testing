@@ -1,5 +1,5 @@
-from data_loader import JsonToGDFLoader
-from validator import DataValidator
+from extract.data_loader import JsonToGDFLoader
+from evaluate.validator import DataValidator
 
 # Define your transformations list as follows:
 transformations = [

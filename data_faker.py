@@ -17,6 +17,10 @@ conn_params = {
 conn = pymysql.connect(**conn_params)
 cur = conn.cursor()
 
+
+
+
+
 # SQL for inserting data
 insert_query = '''
 INSERT INTO transactions (

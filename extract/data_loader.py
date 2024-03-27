@@ -69,10 +69,11 @@ from utils.s3utils import S3Utils
 import io
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
 import logging
-import tqdm
-
+from tqdm import tqdm
+import pandas as pd
+import gc
 # Set up the basic logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
@@ -98,7 +99,7 @@ class JsonToGDFLoader:
         try:
             content = s3utils.download_file_get_content(url)
             if content:
-                return cudf.read_json(io.BytesIO(content), lines=True)
+                return pd.read_json(io.BytesIO(content), lines=True)
         except Exception as e:
             logger.error(f"Failed to download or load json from {url}, error: {e}")
         return None
@@ -108,20 +109,36 @@ class JsonToGDFLoader:
         Parallelize downloads and concatenates individual DataFrames into one.
         """
         futures_to_url = {}
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        st_time = time.time()
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             for url in urls:
                 future = executor.submit(self.download_and_load_json, url)
                 futures_to_url[future] = url
 
-        gdf_list = []
-        
-        # Wrap the as_completed iterator with tqdm for a progress bar
-        for future in tqdm(as_completed(futures_to_url), total=len(futures_to_url), unit="file"):
-            gdf = future.result()
-            if gdf is not None:
-                gdf_list.append(gdf)
+        # Collecting the results into a list to concatenate later
+        df_list = []
 
-        full_gdf = cudf.concat(gdf_list, ignore_index=True) if gdf_list else cudf.DataFrame()
+        # Wrap the as_completed iterator with tqdm for a progress bar
+        for future in tqdm(as_completed(futures_to_url), total=len(urls), unit="file"):
+            df = future.result()
+            if df is not None:
+                print("Adding DF")
+                df_list.append(df)
+                
+        logging.info(f"Downloaded DFs time taken {time.time()-st_time}")
+        logging.info(f"AVG time of a single batch {(time.time()-st_time)/len(urls)}")
+        
+        st_time = time.time()
+                
+        cudf_dfs = [cudf.DataFrame.from_pandas(df) for df in df_list]
+
+        full_gdf = cudf.concat(cudf_dfs, ignore_index=True) if cudf_dfs else cudf.DataFrame()
+        
+        logging.info(f"Combined DFs time taken {time.time()-st_time}")
+        
+        del cudf_dfs,df_list
+        gc.collect()
+        
         return full_gdf
 
     def load(self):
@@ -131,6 +148,7 @@ class JsonToGDFLoader:
         list_urls = s3utils.list_files(self.folder_url)
         max_workers = os.cpu_count() - 1 or 1
         return self.load_jsons_to_df_with_cudf(list_urls, max_workers)
+
     
     def transform_gdf(self, gdf, transformations):
         """

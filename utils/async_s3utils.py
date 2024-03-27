@@ -70,9 +70,9 @@ class async_S3Utils:
         except Exception as e:
             print(f'CLIENT ERROR WHEN DOWNLOADING FILE: {e}')
             try:
-                self.__get_bucket_resource__(BUCKET_CONFIGS.BUCKET_REGION,
+                await self.__get_bucket_resource__(BUCKET_CONFIGS.BUCKET_REGION,
                                              BUCKET_CONFIGS.ROLE_SESSION)
-                return self.upload_file(key, data)
+                return await self.upload_file(key, data)
             except Exception as e:
                 print(f'EXCEPTION WHILE UPLOADING THE FILE: {str(e)}')
                 print(f'TRACEBACK: {traceback.format_exc()}')
